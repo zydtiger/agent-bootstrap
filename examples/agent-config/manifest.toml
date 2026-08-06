@@ -1,0 +1,11 @@
+schema_version = 1
+
+fragments = [
+  "fragments/shared.md",
+  "fragments/codex.md",
+]
+
+[hosts.example-linux]
+fragments = [
+  "fragments/example-linux.md",
+]
