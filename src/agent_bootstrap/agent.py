@@ -1,0 +1,29 @@
+"""Supported instruction agents and their global targets."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+from pathlib import Path
+
+
+class Agent(StrEnum):
+    """An instruction consumer supported by agent-bootstrap."""
+
+    CODEX = "codex"
+    PI = "pi"
+
+
+AGENT_TARGETS: dict[Agent, Path] = {
+    Agent.CODEX: Path(".codex/AGENTS.md"),
+    Agent.PI: Path(".pi/agent/AGENTS.md"),
+}
+
+
+def target_for(agent: Agent) -> Path:
+    """Return the global target path relative to the user's home directory."""
+    return AGENT_TARGETS[agent]
+
+
+def display_target(agent: Agent) -> str:
+    """Return a stable home-relative display path for an agent target."""
+    return f"~/{target_for(agent).as_posix()}"

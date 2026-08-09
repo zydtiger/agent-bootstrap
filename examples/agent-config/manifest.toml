@@ -1,8 +1,17 @@
-schema_version = 1
+schema_version = 2
 
 fragments = [
   "fragments/shared.md",
+]
+
+[agents.codex]
+fragments = [
   "fragments/codex.md",
+]
+
+[agents.pi]
+fragments = [
+  "fragments/pi.md",
 ]
 
 [hosts.example-linux]

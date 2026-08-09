@@ -7,12 +7,13 @@ from typing import Annotated, NoReturn
 
 import typer
 
+from agent_bootstrap.agent import Agent
 from agent_bootstrap.config import ManifestError, load_manifest
 from agent_bootstrap.install import InstallError, inspect_target, install_target
 from agent_bootstrap.render import render_instructions
 
 app = typer.Typer(
-    help="Render and install layered global Codex instructions.",
+    help="Render and install layered global agent instructions.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -30,12 +31,13 @@ ManifestOption = Annotated[
     ),
 ]
 HostOption = Annotated[str, typer.Option("--host", "-H", help="Configured host name.")]
+AgentOption = Annotated[Agent, typer.Option("--agent", "-A", help="Instruction agent to target.")]
 
 
 @app.command()
-def render(manifest: ManifestOption, host: HostOption) -> None:
+def render(manifest: ManifestOption, host: HostOption, agent: AgentOption) -> None:
     """Render instructions to standard output without changing files."""
-    content = _render(manifest, host)
+    content = _render(manifest, host, agent)
     typer.echo(content, nl=False)
 
 
@@ -43,6 +45,7 @@ def render(manifest: ManifestOption, host: HostOption) -> None:
 def install(
     manifest: ManifestOption,
     host: HostOption,
+    agent: AgentOption,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Report changes without writing the target.")
     ] = False,
@@ -53,10 +56,11 @@ def install(
         bool, typer.Option("--force", help="Allow replacement of an unmanaged target.")
     ] = False,
 ) -> None:
-    """Install rendered instructions as the global Codex AGENTS.md."""
-    content = _render(manifest, host)
+    """Install rendered instructions as the selected global agent file."""
+    content = _render(manifest, host, agent)
     try:
-        state = inspect_target(content)
+        state = inspect_target(content, agent)
+        typer.echo(f"Target: {state.path}")
         if show_diff and state.changed:
             typer.echo(state.diff(), nl=False)
         if dry_run:
@@ -70,11 +74,11 @@ def install(
 
 
 @app.command()
-def check(manifest: ManifestOption, host: HostOption) -> None:
-    """Check whether the global Codex AGENTS.md matches the manifest."""
-    content = _render(manifest, host)
+def check(manifest: ManifestOption, host: HostOption, agent: AgentOption) -> None:
+    """Check whether the selected global agent file matches the manifest."""
+    content = _render(manifest, host, agent)
     try:
-        state = inspect_target(content)
+        state = inspect_target(content, agent)
     except InstallError as error:
         _fail(str(error))
     if state.changed:
@@ -83,9 +87,9 @@ def check(manifest: ManifestOption, host: HostOption) -> None:
     typer.echo(f"Up to date: {state.path}")
 
 
-def _render(manifest_path: Path, host: str) -> str:
+def _render(manifest_path: Path, host: str, agent: Agent) -> str:
     try:
-        return render_instructions(load_manifest(manifest_path), host)
+        return render_instructions(load_manifest(manifest_path), host, agent)
     except ManifestError as error:
         _fail(str(error))
 

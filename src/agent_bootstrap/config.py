@@ -9,6 +9,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from agent_bootstrap.agent import Agent
+
 
 class ManifestError(ValueError):
     """Raised when a manifest is invalid or incomplete."""
@@ -22,27 +24,47 @@ class HostConfig:
 
 
 @dataclass(frozen=True)
+class AgentConfig:
+    """Ordered fragments selected for one agent."""
+
+    fragments: tuple[Path, ...]
+
+
+@dataclass(frozen=True)
 class Manifest:
     """Validated manifest with paths resolved relative to its directory."""
 
     path: Path
     root: Path
     fragments: tuple[Path, ...]
+    agents: Mapping[Agent, AgentConfig]
     hosts: Mapping[str, HostConfig]
 
-    def fragments_for(self, host: str) -> tuple[Path, ...]:
-        """Return global and host fragments in composition order."""
+    def fragments_for(self, host: str, agent: Agent) -> tuple[Path, ...]:
+        """Return common, agent, and host fragments in composition order."""
         try:
             host_config = self.hosts[host]
         except KeyError as error:
             choices = ", ".join(sorted(self.hosts)) or "none"
             raise ManifestError(f"unknown host {host!r}; configured hosts: {choices}") from error
 
-        selected = self.fragments + host_config.fragments
+        try:
+            agent_config = self.agents[agent]
+        except KeyError as error:
+            choices = ", ".join(
+                item.value for item in sorted(self.agents, key=lambda item: item.value)
+            )
+            raise ManifestError(
+                f"agent {agent.value!r} is not configured; configured agents: {choices or 'none'}"
+            ) from error
+
+        selected = self.fragments + agent_config.fragments + host_config.fragments
         duplicates = _duplicates(selected)
         if duplicates:
             names = ", ".join(path.relative_to(self.root).as_posix() for path in duplicates)
-            raise ManifestError(f"duplicate fragments selected for host {host!r}: {names}")
+            raise ManifestError(
+                f"duplicate fragments selected for host {host!r} and agent {agent.value!r}: {names}"
+            )
         return selected
 
     def display_path(self, fragment: Path) -> str:
@@ -51,7 +73,7 @@ class Manifest:
 
 
 def load_manifest(path: Path) -> Manifest:
-    """Parse and validate a schema-v1 manifest."""
+    """Parse and validate a schema-v2 manifest."""
     manifest_path = path.expanduser().resolve()
     if not manifest_path.is_file():
         raise ManifestError(f"manifest does not exist: {manifest_path}")
@@ -62,19 +84,41 @@ def load_manifest(path: Path) -> Manifest:
     except tomllib.TOMLDecodeError as error:
         raise ManifestError(f"invalid TOML in {manifest_path}: {error}") from error
 
-    _reject_unknown_keys(raw, {"schema_version", "fragments", "hosts"}, "manifest")
-    if raw.get("schema_version") != 1:
-        raise ManifestError("schema_version must be 1")
+    _reject_unknown_keys(raw, {"schema_version", "fragments", "agents", "hosts"}, "manifest")
+    if raw.get("schema_version") != 2:
+        raise ManifestError("schema_version must be 2")
 
     root = manifest_path.parent
     fragments = _parse_fragments(raw.get("fragments"), root, "fragments")
+    agents = _parse_agents(raw.get("agents"), root)
     hosts = _parse_hosts(raw.get("hosts"), root)
     return Manifest(
         path=manifest_path,
         root=root,
         fragments=fragments,
+        agents=MappingProxyType(agents),
         hosts=MappingProxyType(hosts),
     )
+
+
+def _parse_agents(raw: Any, root: Path) -> dict[Agent, AgentConfig]:
+    if not isinstance(raw, dict) or not raw:
+        raise ManifestError("agents must be a non-empty table")
+
+    agents: dict[Agent, AgentConfig] = {}
+    for name, value in raw.items():
+        try:
+            agent = Agent(name)
+        except ValueError as error:
+            choices = ", ".join(item.value for item in Agent)
+            raise ManifestError(f"unknown agent {name!r}; supported agents: {choices}") from error
+        if not isinstance(value, dict):
+            raise ManifestError(f"agents.{name} must be a table")
+        _reject_unknown_keys(value, {"fragments"}, f"agents.{name}")
+        agents[agent] = AgentConfig(
+            fragments=_parse_fragments(value.get("fragments"), root, f"agents.{name}.fragments")
+        )
+    return agents
 
 
 def _parse_hosts(raw: Any, root: Path) -> dict[str, HostConfig]:

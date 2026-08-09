@@ -1,1 +1,1 @@
-"""Manifest-driven global instruction rendering for Codex."""
+"""Manifest-driven global instruction rendering for supported agents."""
