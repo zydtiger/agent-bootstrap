@@ -1,4 +1,4 @@
-"""Safe publication and drift checking for global Codex instructions."""
+"""Safe publication and drift checking for global agent instructions."""
 
 from __future__ import annotations
 
@@ -8,9 +8,8 @@ from dataclasses import dataclass
 from difflib import unified_diff
 from pathlib import Path
 
+from agent_bootstrap.agent import Agent, target_for
 from agent_bootstrap.render import GENERATED_MARKER
-
-CODEX_TARGET = Path(".codex/AGENTS.md")
 
 
 class InstallError(RuntimeError):
@@ -43,10 +42,10 @@ class TargetState:
         )
 
 
-def inspect_target(rendered: str, *, home: Path | None = None) -> TargetState:
-    """Read the current global Codex instruction target."""
+def inspect_target(rendered: str, agent: Agent, *, home: Path | None = None) -> TargetState:
+    """Read the current global instruction target for an agent."""
     base = Path.home() if home is None else home
-    target = base / CODEX_TARGET
+    target = base / target_for(agent)
     try:
         current = target.read_text(encoding="utf-8")
     except FileNotFoundError:

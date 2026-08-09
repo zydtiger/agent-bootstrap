@@ -1,7 +1,7 @@
 # agent-bootstrap
 
-`agent-bootstrap` renders ordered Markdown fragments into the global Codex
-instruction file at `~/.codex/AGENTS.md`.
+`agent-bootstrap` renders ordered Markdown fragments into a selected global
+agent instruction file.
 
 The renderer is public and configuration-neutral. Personal preferences and
 machine-specific facts belong in a separate configuration directory, which may
@@ -13,18 +13,30 @@ The renderer does not prescribe names such as `common/`, `agents/`, or
 `machines/`. A manifest declares the fragment paths and their exact order, so a
 configuration repository may use any internal layout.
 
-Only the host varies at execution time. This initial version has one fixed
-target—Codex's global `~/.codex/AGENTS.md`—and intentionally has no `--agent` or
-`--output` selector.
+Each invocation selects both a configured host and an agent. The agent is
+mandatory because it determines both the agent-specific fragments and the
+global installation target:
+
+- `codex`: `~/.codex/AGENTS.md`
+- `pi`: `~/.pi/agent/AGENTS.md`
 
 ## Manifest
 
 ```toml
-schema_version = 1
+schema_version = 2
 
 fragments = [
   "preferences/shared.md",
+]
+
+[agents.codex]
+fragments = [
   "preferences/codex.md",
+]
+
+[agents.pi]
+fragments = [
+  "preferences/pi.md",
 ]
 
 [hosts.workstation]
@@ -42,12 +54,13 @@ Fragment paths are relative to the manifest's directory. Rendering preserves
 the declared order:
 
 ```text
-top-level fragments -> selected host fragments
+top-level common fragments -> selected agent fragments -> selected host fragments
 ```
 
 All fragments must be UTF-8 Markdown files inside the manifest directory.
 Missing files, duplicate selections, absolute paths, paths that escape the
-configuration directory, unknown keys, and unknown hosts are errors.
+configuration directory, unknown keys, unknown agents, unknown hosts, and
+duplicate selections across any layer are errors.
 
 A runnable sanitized configuration is available in
 [`examples/agent-config`](examples/agent-config).
@@ -59,7 +72,8 @@ Render to standard output without changing files:
 ```bash
 agent-bootstrap render \
   --manifest ~/agent-config/manifest.toml \
-  --host workstation
+  --host workstation \
+  --agent codex
 ```
 
 Preview installation status and a diff:
@@ -68,16 +82,18 @@ Preview installation status and a diff:
 agent-bootstrap install \
   --manifest ~/agent-config/manifest.toml \
   --host workstation \
+  --agent codex \
   --dry-run \
   --diff
 ```
 
-Install atomically to `~/.codex/AGENTS.md`:
+Install atomically to the selected agent target:
 
 ```bash
 agent-bootstrap install \
   --manifest ~/agent-config/manifest.toml \
-  --host workstation
+  --host workstation \
+  --agent pi
 ```
 
 The installer refuses to replace an existing file that lacks its generated
@@ -89,7 +105,8 @@ Check for drift:
 ```bash
 agent-bootstrap check \
   --manifest ~/agent-config/manifest.toml \
-  --host workstation
+  --host workstation \
+  --agent codex
 ```
 
 `check` exits with `0` when current, `1` when stale or missing, and `2` for an
@@ -112,10 +129,11 @@ uv run python -m agent_bootstrap --help
 
 ## Generated output
 
-Generated files contain a stable header with the selected host and ordered
-manifest-relative source paths. Output uses UTF-8, Unix newlines, one blank line
-between fragments, and one final newline. It contains no timestamps or absolute
-configuration paths, so unchanged inputs produce byte-identical output.
+Generated files contain a stable header with the selected host, agent,
+home-relative target, and ordered manifest-relative source paths. Output uses
+UTF-8, Unix newlines, one blank line between fragments, and one final newline.
+It contains no timestamps or absolute configuration paths, so unchanged inputs
+produce byte-identical output.
 
 ## Security boundary
 
