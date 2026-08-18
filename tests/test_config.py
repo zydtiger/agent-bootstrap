@@ -13,7 +13,10 @@ from agent_bootstrap.config import ManifestError, load_manifest
 def _write_config(root: Path, manifest: str) -> Path:
     (root / "shared.md").write_text("shared\n", encoding="utf-8")
     (root / "agent.md").write_text("agent\n", encoding="utf-8")
+    (root / "pi.md").write_text("pi\n", encoding="utf-8")
     (root / "host.md").write_text("host\n", encoding="utf-8")
+    (root / "other.md").write_text("other\n", encoding="utf-8")
+    (root / "host-agent.md").write_text("host-agent\n", encoding="utf-8")
     path = root / "manifest.toml"
     path.write_text(manifest, encoding="utf-8")
     return path
@@ -183,7 +186,7 @@ fragments = ["host.md"]
         load_manifest(path)
 
 
-def test_rejects_schema_version_one(tmp_path: Path) -> None:
+def test_rejects_unsupported_schema_version(tmp_path: Path) -> None:
     path = _write_config(
         tmp_path,
         """
@@ -198,5 +201,292 @@ fragments = ["host.md"]
 """,
     )
 
-    with pytest.raises(ManifestError, match="schema_version must be 2"):
+    with pytest.raises(ManifestError, match="schema_version must be 2 or 3"):
         load_manifest(path)
+
+
+def test_loads_schema_v3_host_agent_fragments_only_for_the_matching_selection(
+    tmp_path: Path,
+) -> None:
+    path = _write_config(
+        tmp_path,
+        """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[agents.pi]
+fragments = ["pi.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[hosts.laptop]
+fragments = ["other.md"]
+
+[host_agents.workstation.codex]
+fragments = ["host-agent.md"]
+""",
+    )
+
+    manifest = load_manifest(path)
+
+    assert [
+        manifest.display_path(item) for item in manifest.fragments_for("workstation", Agent.CODEX)
+    ] == ["shared.md", "agent.md", "host.md", "host-agent.md"]
+    assert [
+        manifest.display_path(item) for item in manifest.fragments_for("workstation", Agent.PI)
+    ] == ["shared.md", "pi.md", "host.md"]
+    assert [
+        manifest.display_path(item) for item in manifest.fragments_for("laptop", Agent.CODEX)
+    ] == ["shared.md", "agent.md", "other.md"]
+    assert [
+        manifest.display_path(item) for item in manifest.fragments_for("laptop", Agent.PI)
+    ] == ["shared.md", "pi.md", "other.md"]
+
+
+def test_schema_v3_allows_omitting_host_agents(tmp_path: Path) -> None:
+    path = _write_config(
+        tmp_path,
+        """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+""",
+    )
+
+    manifest = load_manifest(path)
+
+    assert manifest.host_agents == {}
+
+
+@pytest.mark.parametrize(
+    ("manifest", "message"),
+    [
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.laptop.codex]
+fragments = ["host-agent.md"]
+""",
+            "host_agents references undeclared host 'laptop'",
+        ),
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.claude]
+fragments = ["host-agent.md"]
+""",
+            "unknown agent 'claude' in host_agents.workstation",
+        ),
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.pi]
+fragments = ["host-agent.md"]
+""",
+            "agent 'pi' in host_agents.workstation is not configured",
+        ),
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.codex]
+extra = true
+fragments = ["host-agent.md"]
+""",
+            "unknown keys in host_agents.workstation.codex: extra",
+        ),
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.codex]
+""",
+            "host_agents.workstation.codex.fragments must be a non-empty array",
+        ),
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.codex]
+fragments = []
+""",
+            "host_agents.workstation.codex.fragments must be a non-empty array",
+        ),
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.codex]
+fragments = "host-agent.md"
+""",
+            "host_agents.workstation.codex.fragments must be a non-empty array",
+        ),
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.codex]
+fragments = ["../outside.md"]
+""",
+            r"host_agents.workstation.codex.fragments\[0\] escapes the manifest directory",
+        ),
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+host_agents = ["workstation"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+""",
+            "host_agents must be a table",
+        ),
+        (
+            """
+schema_version = 3
+fragments = ["shared.md"]
+host_agents.workstation.codex = ["host-agent.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+""",
+            "host_agents.workstation.codex must be a table",
+        ),
+    ],
+)
+def test_rejects_invalid_schema_v3_host_agents(
+    tmp_path: Path, manifest: str, message: str
+) -> None:
+    path = _write_config(tmp_path, manifest)
+
+    with pytest.raises(ManifestError, match=message):
+        load_manifest(path)
+
+
+def test_rejects_host_agents_in_schema_v2_with_upgrade_error(tmp_path: Path) -> None:
+    path = _write_config(
+        tmp_path,
+        """
+schema_version = 2
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.codex]
+fragments = ["host-agent.md"]
+""",
+    )
+
+    with pytest.raises(ManifestError, match="host_agents requires schema_version 3"):
+        load_manifest(path)
+
+
+@pytest.mark.parametrize(
+    "host_agent_fragments",
+    [
+        '["shared.md"]',
+        '["agent.md"]',
+        '["host.md"]',
+        '["host-agent.md", "host-agent.md"]',
+    ],
+)
+def test_rejects_duplicate_fragments_across_all_schema_v3_layers(
+    tmp_path: Path, host_agent_fragments: str
+) -> None:
+    path = _write_config(
+        tmp_path,
+        f"""
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.codex]
+fragments = {host_agent_fragments}
+""",
+    )
+
+    with pytest.raises(ManifestError, match="duplicate fragments"):
+        load_manifest(path).fragments_for("workstation", Agent.CODEX)
