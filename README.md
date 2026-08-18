@@ -23,7 +23,7 @@ global installation target:
 ## Manifest
 
 ```toml
-schema_version = 2
+schema_version = 3
 
 fragments = [
   "preferences/shared.md",
@@ -48,19 +48,31 @@ fragments = [
 fragments = [
   "machines/laptop.md",
 ]
+
+[host_agents.workstation.codex]
+fragments = [
+  "machines/workstation-codex.md",
+]
 ```
 
 Fragment paths are relative to the manifest's directory. Rendering preserves
 the declared order:
 
 ```text
-top-level common fragments -> selected agent fragments -> selected host fragments
+top-level common fragments -> selected agent fragments -> selected host fragments -> matching host-agent fragments
 ```
 
 All fragments must be UTF-8 Markdown files inside the manifest directory.
 Missing files, duplicate selections, absolute paths, paths that escape the
 configuration directory, unknown keys, unknown agents, unknown hosts, and
 duplicate selections across any layer are errors.
+
+`host_agents` is optional and is available in schema version 3. Its host and
+agent names must already be declared in `hosts` and `agents`; its fragments
+are selected only for that exact host-agent pair. Schema version 2 manifests
+remain supported with byte-identical output and the original three-layer
+order. Adding `host_agents` to a schema version 2 manifest is an explicit
+upgrade error; change `schema_version` to `3` first.
 
 A runnable sanitized configuration is available in
 [`examples/agent-config`](examples/agent-config).
