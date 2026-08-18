@@ -27,4 +27,12 @@ uv run pytest
 uv build
 ```
 
+## Versioning and Releases
+
+- Follow Semantic Versioning for the package version in `pyproject.toml` and keep `uv.lock` synchronized.
+- Increment PATCH for backward-compatible fixes, MINOR for backward-compatible functionality, and MAJOR for breaking changes after `1.0.0`.
+- Before `1.0.0`, increment MINOR for breaking API or manifest behavior changes; reserve PATCH for backward-compatible fixes.
+- Treat manifest schema versions independently from the package version. Increment the schema only when a manifest shape or meaning requires explicit opt-in, and preserve older schemas when compatibility is intentional.
+- Tag releases from `main` as `v<package-version>` and create the matching GitHub release only after the required validation succeeds.
+
 Do not stage, commit, configure remotes, push, tag, release, or publish unless explicitly requested.
