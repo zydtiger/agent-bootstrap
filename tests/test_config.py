@@ -14,6 +14,7 @@ def _write_config(root: Path, manifest: str) -> Path:
     (root / "shared.md").write_text("shared\n", encoding="utf-8")
     (root / "agent.md").write_text("agent\n", encoding="utf-8")
     (root / "pi.md").write_text("pi\n", encoding="utf-8")
+    (root / "zcode.md").write_text("zcode\n", encoding="utf-8")
     (root / "host.md").write_text("host\n", encoding="utf-8")
     (root / "other.md").write_text("other\n", encoding="utf-8")
     (root / "host-agent.md").write_text("host-agent\n", encoding="utf-8")
@@ -245,6 +246,37 @@ fragments = ["host-agent.md"]
     assert [
         manifest.display_path(item) for item in manifest.fragments_for("laptop", Agent.PI)
     ] == ["shared.md", "pi.md", "other.md"]
+
+
+def test_loads_schema_v3_zcode_agent_and_intersection_fragments(tmp_path: Path) -> None:
+    path = _write_config(
+        tmp_path,
+        """
+schema_version = 3
+fragments = ["shared.md"]
+
+[agents.codex]
+fragments = ["agent.md"]
+
+[agents.zcode]
+fragments = ["zcode.md"]
+
+[hosts.workstation]
+fragments = ["host.md"]
+
+[host_agents.workstation.zcode]
+fragments = ["host-agent.md"]
+""",
+    )
+
+    manifest = load_manifest(path)
+
+    assert [
+        manifest.display_path(item) for item in manifest.fragments_for("workstation", Agent.ZCODE)
+    ] == ["shared.md", "zcode.md", "host.md", "host-agent.md"]
+    assert [
+        manifest.display_path(item) for item in manifest.fragments_for("workstation", Agent.CODEX)
+    ] == ["shared.md", "agent.md", "host.md"]
 
 
 def test_schema_v3_allows_omitting_host_agents(tmp_path: Path) -> None:

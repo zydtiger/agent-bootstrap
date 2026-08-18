@@ -19,6 +19,7 @@ global installation target:
 
 - `codex`: `~/.codex/AGENTS.md`
 - `pi`: `~/.pi/agent/AGENTS.md`
+- `zcode`: `~/.zcode/AGENTS.md`
 
 ## Manifest
 
