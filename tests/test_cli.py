@@ -17,6 +17,7 @@ def _manifest(tmp_path: Path) -> Path:
     (config / "shared.md").write_text("# Shared\n", encoding="utf-8")
     (config / "codex.md").write_text("# Codex\n", encoding="utf-8")
     (config / "pi.md").write_text("# Pi\n", encoding="utf-8")
+    (config / "zcode.md").write_text("# Zcode\n", encoding="utf-8")
     (config / "host.md").write_text("# Host\n", encoding="utf-8")
     manifest = config / "manifest.toml"
     manifest.write_text(
@@ -29,6 +30,9 @@ fragments = ["codex.md"]
 
 [agents.pi]
 fragments = ["pi.md"]
+
+[agents.zcode]
+fragments = ["zcode.md"]
 
 [hosts.workstation]
 fragments = ["host.md"]
@@ -103,6 +107,43 @@ def test_install_and_check_use_selected_agent_target(tmp_path: Path, monkeypatch
     assert target.is_file()
     assert "Agent: pi" in target.read_text(encoding="utf-8")
     assert "# Pi" in target.read_text(encoding="utf-8")
+
+
+def test_render_and_dry_run_use_zcode_target(tmp_path: Path, monkeypatch: object) -> None:
+    manifest = _manifest(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))  # type: ignore[attr-defined]
+
+    render_result = runner.invoke(
+        app,
+        ["render", "--manifest", str(manifest), "--host", "workstation", "--agent", "zcode"],
+    )
+    dry_run_result = runner.invoke(
+        app,
+        [
+            "install",
+            "--manifest",
+            str(manifest),
+            "--host",
+            "workstation",
+            "--agent",
+            "zcode",
+            "--dry-run",
+            "--diff",
+        ],
+    )
+
+    assert render_result.exit_code == 0
+    assert "Agent: zcode" in render_result.output
+    assert "Target: ~/.zcode/AGENTS.md" in render_result.output
+    assert "Sources:\n- shared.md\n- zcode.md\n- host.md\n-->" in render_result.output
+    assert "# Shared\n\n# Zcode\n\n# Host\n" in render_result.output
+    assert dry_run_result.exit_code == 0
+    assert f"Target: {home / '.zcode/AGENTS.md'}" in dry_run_result.output
+    assert "+# Zcode" in dry_run_result.output
+    assert "Would update" in dry_run_result.output
+    assert not (home / ".zcode/AGENTS.md").exists()
 
 
 def test_check_reports_stale_target(tmp_path: Path, monkeypatch: object) -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_bootstrap.agent import Agent
+from agent_bootstrap.agent import Agent, target_for
 from agent_bootstrap.install import InstallError, inspect_target, install_target
 from agent_bootstrap.render import GENERATED_MARKER
 
@@ -17,7 +17,11 @@ def _rendered(body: str = "content") -> str:
 
 @pytest.mark.parametrize(
     ("agent", "target"),
-    [(Agent.CODEX, ".codex/AGENTS.md"), (Agent.PI, ".pi/agent/AGENTS.md")],
+    [
+        (Agent.CODEX, ".codex/AGENTS.md"),
+        (Agent.PI, ".pi/agent/AGENTS.md"),
+        (Agent.ZCODE, ".zcode/AGENTS.md"),
+    ],
 )
 def test_installs_and_checks_generated_target(tmp_path: Path, agent: Agent, target: str) -> None:
     state = inspect_target(_rendered(), agent, home=tmp_path)
@@ -29,11 +33,12 @@ def test_installs_and_checks_generated_target(tmp_path: Path, agent: Agent, targ
     assert not inspect_target(_rendered(), agent, home=tmp_path).changed
 
 
-def test_refuses_unmanaged_target_without_force(tmp_path: Path) -> None:
-    target = tmp_path / ".codex/AGENTS.md"
-    target.parent.mkdir()
+@pytest.mark.parametrize("agent", [Agent.CODEX, Agent.PI, Agent.ZCODE])
+def test_refuses_unmanaged_target_without_force(tmp_path: Path, agent: Agent) -> None:
+    target = tmp_path / target_for(agent)
+    target.parent.mkdir(parents=True)
     target.write_text("hand-written\n", encoding="utf-8")
-    state = inspect_target(_rendered(), Agent.CODEX, home=tmp_path)
+    state = inspect_target(_rendered(), agent, home=tmp_path)
 
     with pytest.raises(InstallError, match="refusing to replace unmanaged file"):
         install_target(state)
@@ -41,12 +46,13 @@ def test_refuses_unmanaged_target_without_force(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == "hand-written\n"
 
 
-def test_force_replaces_unmanaged_target(tmp_path: Path) -> None:
-    target = tmp_path / ".codex/AGENTS.md"
-    target.parent.mkdir()
+@pytest.mark.parametrize("agent", [Agent.CODEX, Agent.PI, Agent.ZCODE])
+def test_force_replaces_unmanaged_target(tmp_path: Path, agent: Agent) -> None:
+    target = tmp_path / target_for(agent)
+    target.parent.mkdir(parents=True)
     target.write_text("hand-written\n", encoding="utf-8")
 
-    assert install_target(inspect_target(_rendered(), Agent.CODEX, home=tmp_path), force=True)
+    assert install_target(inspect_target(_rendered(), agent, home=tmp_path), force=True)
     assert target.read_text(encoding="utf-8") == _rendered()
 
 

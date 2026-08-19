@@ -11,11 +11,13 @@ class Agent(StrEnum):
 
     CODEX = "codex"
     PI = "pi"
+    ZCODE = "zcode"
 
 
 AGENT_TARGETS: dict[Agent, Path] = {
     Agent.CODEX: Path(".codex/AGENTS.md"),
     Agent.PI: Path(".pi/agent/AGENTS.md"),
+    Agent.ZCODE: Path(".zcode/AGENTS.md"),
 }
 
 
