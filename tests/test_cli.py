@@ -18,6 +18,7 @@ def _manifest(tmp_path: Path) -> Path:
     (config / "codex.md").write_text("# Codex\n", encoding="utf-8")
     (config / "pi.md").write_text("# Pi\n", encoding="utf-8")
     (config / "zcode.md").write_text("# Zcode\n", encoding="utf-8")
+    (config / "claude.md").write_text("# Claude\n", encoding="utf-8")
     (config / "host.md").write_text("# Host\n", encoding="utf-8")
     manifest = config / "manifest.toml"
     manifest.write_text(
@@ -33,6 +34,9 @@ fragments = ["pi.md"]
 
 [agents.zcode]
 fragments = ["zcode.md"]
+
+[agents.claude]
+fragments = ["claude.md"]
 
 [hosts.workstation]
 fragments = ["host.md"]
@@ -146,6 +150,42 @@ def test_render_and_dry_run_use_zcode_target(tmp_path: Path, monkeypatch: object
     assert not (home / ".zcode/AGENTS.md").exists()
 
 
+def test_render_and_dry_run_use_claude_target(tmp_path: Path, monkeypatch: object) -> None:
+    manifest = _manifest(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))  # type: ignore[attr-defined]
+
+    render_result = runner.invoke(
+        app, ["render", "--manifest", str(manifest), "--host", "workstation", "--agent", "claude"]
+    )
+    dry_run_result = runner.invoke(
+        app,
+        [
+            "install",
+            "--manifest",
+            str(manifest),
+            "--host",
+            "workstation",
+            "--agent",
+            "claude",
+            "--dry-run",
+            "--diff",
+        ],
+    )
+
+    assert render_result.exit_code == 0
+    assert "Agent: claude" in render_result.output
+    assert "Target: ~/.claude/CLAUDE.md" in render_result.output
+    assert "Sources:\n- shared.md\n- claude.md\n- host.md\n-->" in render_result.output
+    assert "# Shared\n\n# Claude\n\n# Host\n" in render_result.output
+    assert dry_run_result.exit_code == 0
+    assert f"Target: {home / '.claude/CLAUDE.md'}" in dry_run_result.output
+    assert "+# Claude" in dry_run_result.output
+    assert "Would update" in dry_run_result.output
+    assert not (home / ".claude/CLAUDE.md").exists()
+
+
 def test_check_reports_stale_target(tmp_path: Path, monkeypatch: object) -> None:
     manifest = _manifest(tmp_path)
     home = tmp_path / "home"
@@ -179,7 +219,7 @@ def test_agent_option_is_required_and_restricted(tmp_path: Path) -> None:
     missing = runner.invoke(app, ["render", "--manifest", str(manifest), "--host", "workstation"])
     invalid = runner.invoke(
         app,
-        ["render", "--manifest", str(manifest), "--host", "workstation", "--agent", "claude"],
+        ["render", "--manifest", str(manifest), "--host", "workstation", "--agent", "cursor"],
     )
 
     assert missing.exit_code == 2
