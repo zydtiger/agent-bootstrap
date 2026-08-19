@@ -21,6 +21,7 @@ def _rendered(body: str = "content") -> str:
         (Agent.CODEX, ".codex/AGENTS.md"),
         (Agent.PI, ".pi/agent/AGENTS.md"),
         (Agent.ZCODE, ".zcode/AGENTS.md"),
+        (Agent.CLAUDE, ".claude/CLAUDE.md"),
     ],
 )
 def test_installs_and_checks_generated_target(tmp_path: Path, agent: Agent, target: str) -> None:
@@ -33,7 +34,7 @@ def test_installs_and_checks_generated_target(tmp_path: Path, agent: Agent, targ
     assert not inspect_target(_rendered(), agent, home=tmp_path).changed
 
 
-@pytest.mark.parametrize("agent", [Agent.CODEX, Agent.PI, Agent.ZCODE])
+@pytest.mark.parametrize("agent", [Agent.CODEX, Agent.PI, Agent.ZCODE, Agent.CLAUDE])
 def test_refuses_unmanaged_target_without_force(tmp_path: Path, agent: Agent) -> None:
     target = tmp_path / target_for(agent)
     target.parent.mkdir(parents=True)
@@ -46,7 +47,7 @@ def test_refuses_unmanaged_target_without_force(tmp_path: Path, agent: Agent) ->
     assert target.read_text(encoding="utf-8") == "hand-written\n"
 
 
-@pytest.mark.parametrize("agent", [Agent.CODEX, Agent.PI, Agent.ZCODE])
+@pytest.mark.parametrize("agent", [Agent.CODEX, Agent.PI, Agent.ZCODE, Agent.CLAUDE])
 def test_force_replaces_unmanaged_target(tmp_path: Path, agent: Agent) -> None:
     target = tmp_path / target_for(agent)
     target.parent.mkdir(parents=True)

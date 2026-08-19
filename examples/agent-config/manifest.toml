@@ -19,6 +19,11 @@ fragments = [
   "fragments/zcode.md",
 ]
 
+[agents.claude]
+fragments = [
+  "fragments/claude.md",
+]
+
 [hosts.example-linux]
 fragments = [
   "fragments/example-linux.md",
