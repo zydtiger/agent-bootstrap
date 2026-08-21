@@ -27,6 +27,14 @@ uv run pytest
 uv build
 ```
 
+Ruff and mypy are also enforced by the commit hooks in
+`.pre-commit-config.yaml`. Install the runner once per machine:
+
+```bash
+uv tool install prek
+prek install
+```
+
 ## Versioning and Releases
 
 - Follow Semantic Versioning for the package version in `pyproject.toml` and keep `uv.lock` synchronized.
