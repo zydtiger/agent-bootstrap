@@ -42,5 +42,6 @@ prek install
 - Before `1.0.0`, increment MINOR for breaking API or manifest behavior changes; reserve PATCH for backward-compatible fixes.
 - Treat manifest schema versions independently from the package version. Increment the schema only when a manifest shape or meaning requires explicit opt-in, and preserve older schemas when compatibility is intentional.
 - Tag releases from `main` as `v<package-version>` and create the matching GitHub release only after the required validation succeeds.
+- Never move or replace an existing release tag. A repository ruleset named `protect-release-tags` enforces this on the remote for `refs/tags/v*`, denying tag deletion, non-fast-forward updates, and updates, with no bypass. A rejected tag push is that rule working, not a broken remote.
 
 Do not stage, commit, configure remotes, push, tag, release, or publish unless explicitly requested.
