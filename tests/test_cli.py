@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -9,6 +10,7 @@ from typer.testing import CliRunner
 from agent_bootstrap.cli import app
 
 runner = CliRunner()
+ANSI_STYLE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _manifest(tmp_path: Path) -> Path:
@@ -223,6 +225,6 @@ def test_agent_option_is_required_and_restricted(tmp_path: Path) -> None:
     )
 
     assert missing.exit_code == 2
-    assert "Missing option '--agent'" in missing.output
+    assert "Missing option '--agent'" in ANSI_STYLE.sub("", missing.output)
     assert invalid.exit_code == 2
-    assert "Invalid value for '--agent'" in invalid.output
+    assert "Invalid value for '--agent'" in ANSI_STYLE.sub("", invalid.output)
