@@ -244,9 +244,11 @@ fragments = ["host-agent.md"]
     assert [
         manifest.display_path(item) for item in manifest.fragments_for("laptop", Agent.CODEX)
     ] == ["shared.md", "agent.md", "other.md"]
-    assert [
-        manifest.display_path(item) for item in manifest.fragments_for("laptop", Agent.PI)
-    ] == ["shared.md", "pi.md", "other.md"]
+    assert [manifest.display_path(item) for item in manifest.fragments_for("laptop", Agent.PI)] == [
+        "shared.md",
+        "pi.md",
+        "other.md",
+    ]
 
 
 def test_loads_schema_v3_zcode_agent_and_intersection_fragments(tmp_path: Path) -> None:
@@ -492,9 +494,7 @@ fragments = ["host.md"]
         ),
     ],
 )
-def test_rejects_invalid_schema_v3_host_agents(
-    tmp_path: Path, manifest: str, message: str
-) -> None:
+def test_rejects_invalid_schema_v3_host_agents(tmp_path: Path, manifest: str, message: str) -> None:
     path = _write_config(tmp_path, manifest)
 
     with pytest.raises(ManifestError, match=message):

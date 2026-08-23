@@ -74,10 +74,7 @@ class Manifest:
             host_agent_fragments = host_agent_config.fragments
 
         selected = (
-            self.fragments
-            + agent_config.fragments
-            + host_config.fragments
-            + host_agent_fragments
+            self.fragments + agent_config.fragments + host_config.fragments + host_agent_fragments
         )
         duplicates = _duplicates(selected)
         if duplicates:
