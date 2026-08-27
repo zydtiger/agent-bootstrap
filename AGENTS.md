@@ -27,13 +27,19 @@ uv run pytest
 uv build
 ```
 
-Ruff and mypy are also enforced by the commit hooks in
-`.pre-commit-config.yaml`. Install the runner once per machine:
+Ruff, mypy and lockfile consistency are enforced by the commit-stage hooks in
+`.pre-commit-config.yaml`, and pytest by the `pre-push` stage hook. Install the
+runner once per machine:
 
 ```bash
 uv tool install prek
 prek install
 ```
+
+CI (`.github/workflows/ci.yml`) invokes the same hook runner rather than
+restating hook commands: a `lint` job runs the commit-stage hooks once, and a
+matrixed `test` job runs the pre-push stage on every supported Python version,
+then builds and smoke-tests the wheel on the lowest one.
 
 ## Versioning and Releases
 
