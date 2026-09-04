@@ -21,6 +21,12 @@ global installation target:
 - `pi`: `~/.pi/agent/AGENTS.md`
 - `zcode`: `~/.zcode/AGENTS.md`
 - `claude`: `~/.claude/CLAUDE.md`
+- `cursor`: `~/.cursor/rules/global.mdc`
+
+Cursor's target is a machine-local user rule that does not sync through a Cursor
+account. Its generated output begins with `alwaysApply: true` YAML frontmatter
+so Cursor includes the rule in every Agent conversation. The other targets
+retain their existing plain-Markdown output.
 
 ## Manifest
 
@@ -39,6 +45,11 @@ fragments = [
 [agents.pi]
 fragments = [
   "preferences/pi.md",
+]
+
+[agents.cursor]
+fragments = [
+  "preferences/cursor.md",
 ]
 
 [hosts.workstation]

@@ -13,6 +13,7 @@ class Agent(StrEnum):
     PI = "pi"
     ZCODE = "zcode"
     CLAUDE = "claude"
+    CURSOR = "cursor"
 
 
 AGENT_TARGETS: dict[Agent, Path] = {
@@ -20,6 +21,7 @@ AGENT_TARGETS: dict[Agent, Path] = {
     Agent.PI: Path(".pi/agent/AGENTS.md"),
     Agent.ZCODE: Path(".zcode/AGENTS.md"),
     Agent.CLAUDE: Path(".claude/CLAUDE.md"),
+    Agent.CURSOR: Path(".cursor/rules/global.mdc"),
 }
 
 
