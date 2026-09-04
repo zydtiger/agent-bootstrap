@@ -45,6 +45,8 @@ then builds and smoke-tests the wheel on the lowest one.
 ## Versioning and Releases
 
 - Follow Semantic Versioning for the package version in `pyproject.toml` and keep `uv.lock` synchronized.
+- Before changing the package version, state the exact current and proposed versions and obtain explicit user approval. Approval to implement, commit, open a pull request, or merge does not authorize a version bump.
+- Treat an approved version bump as one release transaction: update and validate the package metadata, commit and push the release state, create and push the matching immutable tag, and publish the matching GitHub release. Do not leave bumped package metadata unreleased unless the user explicitly requests that exception.
 - Increment PATCH for backward-compatible fixes, MINOR for backward-compatible functionality, and MAJOR for breaking changes after `1.0.0`.
 - Before `1.0.0`, increment MINOR for breaking API or manifest behavior changes; reserve PATCH for backward-compatible fixes.
 - Treat manifest schema versions independently from the package version. Increment the schema only when a manifest shape or meaning requires explicit opt-in, and preserve older schemas when compatibility is intentional.
