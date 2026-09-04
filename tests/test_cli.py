@@ -21,6 +21,7 @@ def _manifest(tmp_path: Path) -> Path:
     (config / "pi.md").write_text("# Pi\n", encoding="utf-8")
     (config / "zcode.md").write_text("# Zcode\n", encoding="utf-8")
     (config / "claude.md").write_text("# Claude\n", encoding="utf-8")
+    (config / "cursor.md").write_text("# Cursor\n", encoding="utf-8")
     (config / "host.md").write_text("# Host\n", encoding="utf-8")
     manifest = config / "manifest.toml"
     manifest.write_text(
@@ -39,6 +40,9 @@ fragments = ["zcode.md"]
 
 [agents.claude]
 fragments = ["claude.md"]
+
+[agents.cursor]
+fragments = ["cursor.md"]
 
 [hosts.workstation]
 fragments = ["host.md"]
@@ -188,6 +192,56 @@ def test_render_and_dry_run_use_claude_target(tmp_path: Path, monkeypatch: objec
     assert not (home / ".claude/CLAUDE.md").exists()
 
 
+def test_render_install_and_check_use_cursor_target(tmp_path: Path, monkeypatch: object) -> None:
+    manifest = _manifest(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))  # type: ignore[attr-defined]
+
+    render_result = runner.invoke(
+        app, ["render", "--manifest", str(manifest), "--host", "workstation", "--agent", "cursor"]
+    )
+    dry_run_result = runner.invoke(
+        app,
+        [
+            "install",
+            "--manifest",
+            str(manifest),
+            "--host",
+            "workstation",
+            "--agent",
+            "cursor",
+            "--dry-run",
+            "--diff",
+        ],
+    )
+    target = home / ".cursor/rules/global.mdc"
+
+    assert render_result.exit_code == 0
+    assert render_result.output.startswith("---\nalwaysApply: true\n---\n\n<!--")
+    assert "Agent: cursor" in render_result.output
+    assert "Target: ~/.cursor/rules/global.mdc" in render_result.output
+    assert "Sources:\n- shared.md\n- cursor.md\n- host.md\n-->" in render_result.output
+    assert dry_run_result.exit_code == 0
+    assert f"Target: {target}" in dry_run_result.output
+    assert "+alwaysApply: true" in dry_run_result.output
+    assert "Would update" in dry_run_result.output
+    assert not target.exists()
+
+    install_result = runner.invoke(
+        app,
+        ["install", "--manifest", str(manifest), "--host", "workstation", "--agent", "cursor"],
+    )
+    check_result = runner.invoke(
+        app,
+        ["check", "--manifest", str(manifest), "--host", "workstation", "--agent", "cursor"],
+    )
+
+    assert install_result.exit_code == 0
+    assert check_result.exit_code == 0
+    assert target.read_text(encoding="utf-8") == render_result.output
+
+
 def test_check_reports_stale_target(tmp_path: Path, monkeypatch: object) -> None:
     manifest = _manifest(tmp_path)
     home = tmp_path / "home"
@@ -221,7 +275,7 @@ def test_agent_option_is_required_and_restricted(tmp_path: Path) -> None:
     missing = runner.invoke(app, ["render", "--manifest", str(manifest), "--host", "workstation"])
     invalid = runner.invoke(
         app,
-        ["render", "--manifest", str(manifest), "--host", "workstation", "--agent", "cursor"],
+        ["render", "--manifest", str(manifest), "--host", "workstation", "--agent", "gemini"],
     )
 
     assert missing.exit_code == 2

@@ -24,7 +24,10 @@ def render_instructions(manifest: Manifest, host: str, agent: Agent) -> str:
         "-->",
     ]
 
-    sections = ["\n".join(header_lines)]
+    sections = []
+    if agent is Agent.CURSOR:
+        sections.append("---\nalwaysApply: true\n---")
+    sections.append("\n".join(header_lines))
     for fragment, source_name in zip(fragments, source_names, strict=True):
         try:
             content = fragment.read_text(encoding="utf-8")

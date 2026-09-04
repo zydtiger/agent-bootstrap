@@ -24,6 +24,11 @@ fragments = [
   "fragments/claude.md",
 ]
 
+[agents.cursor]
+fragments = [
+  "fragments/cursor.md",
+]
+
 [hosts.example-linux]
 fragments = [
   "fragments/example-linux.md",
