@@ -178,9 +178,11 @@ environment contents—even when the configuration repository is private.
 ## Development
 
 ```bash
-uv sync
-uv run ruff check .
-uv run mypy
-uv run pytest
-uv build
+uv sync --locked
+uv tool install prek   # once per machine
+prek install           # once per clone
 ```
+
+Run the full, targeted, or documentation-only validation defined in
+`AGENTS.md`; that file points to the same hook stages CI executes. Build package
+changes with `uv build` after validation.

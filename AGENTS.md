@@ -15,26 +15,27 @@
 - Keep rendering deterministic: no timestamps, environment interpolation, or executable templates.
 - Publish instruction files atomically and refuse unmanaged-file replacement by default.
 
-## Development
+## Development and validation
 
-Use uv for environment, dependency, command, and build operations:
-
-```bash
-uv sync
-uv run ruff check .
-uv run mypy
-uv run pytest
-uv build
-```
-
-Ruff, mypy and lockfile consistency are enforced by the commit-stage hooks in
-`.pre-commit-config.yaml`, and pytest by the `pre-push` stage hook. Install the
-runner once per machine:
+Use uv for environment, dependency, command, and build operations. Install the
+hook runner once per machine, then activate this clone:
 
 ```bash
 uv tool install prek
 prek install
 ```
+
+- Full: `prek run --all-files && prek run --all-files --hook-stage pre-push`
+- Targeted: `prek run --files <changed-path>... && prek run --files <changed-path>... --hook-stage pre-push`
+- Documentation-only: `prek run --files <changed-document-path>... && git diff --check -- <changed-document-path>...`
+- Package changes: run the full validation, then `uv build`.
+
+`.pre-commit-config.yaml` is the sole definition of mechanical commands and
+their scope. Commit subjects must start with `Merge ` or use
+`prefix(scope): lowercase summary`, where the optional scope is lowercase and
+the prefix is `feat`, `fix`, `docs`, `test`, `build`, `ci`, `refactor`, `perf`,
+`conf`, or `chore`. The `commit-msg` hook enforces that contract; source-file
+validation does not validate commit messages.
 
 CI (`.github/workflows/ci.yml`) invokes the same hook runner rather than
 restating hook commands: a `lint` job runs the commit-stage hooks once, and a
