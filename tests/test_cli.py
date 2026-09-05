@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
+from unittest import mock
 
+import pytest
 from typer.testing import CliRunner
 
+import agent_bootstrap.batch as batch
+import agent_bootstrap.cli as cli
 from agent_bootstrap.cli import app
+from agent_bootstrap.install import TargetState, install_target
 
 runner = CliRunner()
 ANSI_STYLE = re.compile(r"\x1b\[[0-9;]*m")
@@ -282,3 +288,374 @@ def test_agent_option_is_required_and_restricted(tmp_path: Path) -> None:
     assert "Missing option '--agent'" in ANSI_STYLE.sub("", missing.output)
     assert invalid.exit_code == 2
     assert "Invalid value for '--agent'" in ANSI_STYLE.sub("", invalid.output)
+
+
+def _home(tmp_path: Path, monkeypatch: object) -> Path:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))  # type: ignore[attr-defined]
+    return home
+
+
+TARGETS: dict[str, str] = {
+    "codex": ".codex/AGENTS.md",
+    "pi": ".pi/agent/AGENTS.md",
+    "zcode": ".zcode/AGENTS.md",
+    "claude": ".claude/CLAUDE.md",
+    "cursor": ".cursor/rules/global.mdc",
+}
+
+
+def _target(home: Path, agent: str) -> Path:
+    return home / TARGETS[agent]
+
+
+def _install_single(manifest: Path, agent: str) -> None:
+    result = runner.invoke(
+        app,
+        ["install", "--manifest", str(manifest), "--host", "workstation", "--agent", agent],
+    )
+    assert result.exit_code == 0
+
+
+def test_validate_reports_matrix_without_inspecting_installations(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+    stale = _target(home, "codex")
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["validate", "--manifest", str(manifest)])
+
+    assert result.exit_code == 0
+    assert "workstation codex: valid" in result.output
+    assert "workstation cursor: valid" in result.output
+    assert "5 target(s): 5 valid" in result.output
+    assert stale.read_text(encoding="utf-8") == "stale\n"
+    assert list(home.iterdir()) == [stale.parent]
+
+
+def test_validate_narrows_selection_and_rejects_unknown_selectors(tmp_path: Path) -> None:
+    manifest = _manifest(tmp_path)
+
+    by_agent = runner.invoke(app, ["validate", "--manifest", str(manifest), "--agent", "codex"])
+    by_host = runner.invoke(app, ["validate", "--manifest", str(manifest), "--host", "workstation"])
+    unknown_host = runner.invoke(app, ["validate", "--manifest", str(manifest), "--host", "laptop"])
+    unknown_agent = runner.invoke(
+        app, ["validate", "--manifest", str(manifest), "--agent", "cursor", "--host", "workstation"]
+    )
+
+    assert by_agent.exit_code == 0
+    assert "workstation codex: valid" in by_agent.output
+    assert "1 target(s): 1 valid" in by_agent.output
+    assert by_host.exit_code == 0
+    assert "5 target(s): 5 valid" in by_host.output
+    assert unknown_host.exit_code == 2
+    assert "unknown host 'laptop'" in unknown_host.output
+    assert unknown_agent.exit_code == 0
+
+
+def test_validate_reports_invalid_targets_with_diagnostics(tmp_path: Path) -> None:
+    manifest = _manifest(tmp_path)
+    (manifest.parent / "cursor.md").write_bytes(b"\xff")
+
+    result = runner.invoke(app, ["validate", "--manifest", str(manifest)])
+
+    assert result.exit_code == 2
+    assert "workstation cursor: invalid" in result.output
+    assert "not valid UTF-8" in result.output
+    assert "workstation codex: valid" in result.output
+    assert "5 target(s): 4 valid, 1 invalid" in result.output
+
+
+def test_check_all_agents_exits_zero_when_every_target_is_current(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+    for agent in ("codex", "pi", "zcode", "claude", "cursor"):
+        _install_single(manifest, agent)
+
+    result = runner.invoke(
+        app, ["check", "--manifest", str(manifest), "--host", "workstation", "--all-agents"]
+    )
+
+    assert result.exit_code == 0
+    assert f"workstation codex: current {_target(home, 'codex')}" in result.output
+    assert "5 target(s): 5 current" in result.output
+
+
+def test_check_all_agents_reports_missing_stale_and_unmanaged(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+    _install_single(manifest, "codex")
+    stale = _target(home, "codex")
+    stale.write_text(stale.read_text(encoding="utf-8") + "drift\n", encoding="utf-8")
+    unmanaged = _target(home, "claude")
+    unmanaged.parent.mkdir(parents=True)
+    unmanaged.write_text("hand-written\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app, ["check", "--manifest", str(manifest), "--host", "workstation", "--all-agents"]
+    )
+
+    assert result.exit_code == 1
+    assert f"workstation claude: unmanaged {unmanaged}" in result.output
+    assert f"workstation codex: stale {stale}" in result.output
+    assert f"workstation pi: missing {_target(home, 'pi')}" in result.output
+    assert "refusing to replace unmanaged file" in result.output
+    assert "5 target(s): 1 unmanaged, 1 stale, 3 missing" in result.output
+
+
+def test_check_all_agents_exits_two_when_rendering_fails(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    _home(tmp_path, monkeypatch)
+    (manifest.parent / "cursor.md").write_bytes(b"\xff")
+
+    result = runner.invoke(
+        app, ["check", "--manifest", str(manifest), "--host", "workstation", "--all-agents"]
+    )
+
+    assert result.exit_code == 2
+    assert "workstation cursor: error" in result.output
+    assert "not valid UTF-8" in result.output
+    assert "workstation codex: missing" in result.output
+    assert "5 target(s): 4 missing, 1 error" in result.output
+
+
+def test_check_and_install_require_exactly_one_agent_selector(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+
+    for command in ("check", "install"):
+        missing = runner.invoke(
+            app, [command, "--manifest", str(manifest), "--host", "workstation"]
+        )
+        conflicting = runner.invoke(
+            app,
+            [
+                command,
+                "--manifest",
+                str(manifest),
+                "--host",
+                "workstation",
+                "--agent",
+                "codex",
+                "--all-agents",
+            ],
+        )
+
+        assert missing.exit_code == 2
+        assert "specify --agent or --all-agents" in missing.output
+        assert conflicting.exit_code == 2
+        assert "not both" in conflicting.output
+
+    assert list(home.iterdir()) == []
+
+
+def test_install_all_agents_dry_run_previews_without_writes(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+    _install_single(manifest, "pi")
+    unmanaged = _target(home, "claude")
+    unmanaged.parent.mkdir(parents=True)
+    unmanaged.write_text("hand-written\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "install",
+            "--manifest",
+            str(manifest),
+            "--host",
+            "workstation",
+            "--all-agents",
+            "--dry-run",
+            "--diff",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert f"workstation claude: blocked {unmanaged}" in result.output
+    assert "refusing to replace unmanaged file" in result.output
+    assert f"workstation codex: would-update {_target(home, 'codex')}" in result.output
+    assert f"workstation pi: current {_target(home, 'pi')}" in result.output
+    assert "5 target(s): 1 blocked, 3 would-update, 1 current" in result.output
+    assert "+# Codex" in result.output
+    assert "-hand-written" in result.output
+    assert unmanaged.read_text(encoding="utf-8") == "hand-written\n"
+    assert not _target(home, "codex").exists()
+    assert not _target(home, "cursor").exists()
+
+
+def test_install_all_agents_dry_run_exits_two_on_render_error(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+    (manifest.parent / "cursor.md").write_bytes(b"\xff")
+
+    result = runner.invoke(
+        app,
+        [
+            "install",
+            "--manifest",
+            str(manifest),
+            "--host",
+            "workstation",
+            "--all-agents",
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "workstation cursor: error" in result.output
+    assert "workstation codex: would-update" in result.output
+    assert list(home.iterdir()) == []
+
+
+def test_install_rejects_force_with_all_agents(tmp_path: Path, monkeypatch: object) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [
+            "install",
+            "--manifest",
+            str(manifest),
+            "--host",
+            "workstation",
+            "--all-agents",
+            "--force",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--force requires an explicit --agent" in result.output
+    assert list(home.iterdir()) == []
+
+
+def test_install_all_agents_blocked_by_unmanaged_writes_nothing(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+    _install_single(manifest, "pi")
+    current = _target(home, "pi")
+    os.utime(current, ns=(1_000_000, 1_000_000))
+    unmanaged = _target(home, "claude")
+    unmanaged.parent.mkdir(parents=True)
+    unmanaged.write_text("hand-written\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app, ["install", "--manifest", str(manifest), "--host", "workstation", "--all-agents"]
+    )
+
+    assert result.exit_code == 2
+    assert "workstation claude: blocked" in result.output
+    assert "workstation pi: blocked" in result.output
+    assert "5 target(s): 5 blocked" in result.output
+    assert unmanaged.read_text(encoding="utf-8") == "hand-written\n"
+    assert current.stat().st_mtime_ns == 1_000_000
+    assert not _target(home, "codex").exists()
+
+
+def test_install_all_agents_updates_only_changed_targets(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+    _install_single(manifest, "pi")
+    current = _target(home, "pi")
+    os.utime(current, ns=(1_000_000, 1_000_000))
+
+    result = runner.invoke(
+        app, ["install", "--manifest", str(manifest), "--host", "workstation", "--all-agents"]
+    )
+
+    assert result.exit_code == 0
+    assert "5 target(s): 4 updated, 1 unchanged" in result.output
+    assert current.stat().st_mtime_ns == 1_000_000
+    for agent in ("codex", "pi", "zcode", "claude", "cursor"):
+        target = _target(home, agent)
+        rendered = runner.invoke(
+            app,
+            ["render", "--manifest", str(manifest), "--host", "workstation", "--agent", agent],
+        )
+        assert target.read_text(encoding="utf-8") == rendered.output
+        assert target.stat().st_mode & 0o777 == 0o600
+
+
+def test_install_all_agents_partial_failure_then_rerun_completes(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+    real_install = install_target
+
+    def failing_install(state: TargetState) -> bool:
+        if "Agent: pi" in state.rendered:
+            raise OSError("simulated write failure")
+        return real_install(state)
+
+    with monkeypatch.context() as patcher:  # type: ignore[attr-defined]
+        patcher.setattr(batch, "install_target", failing_install)
+        failed = runner.invoke(
+            app, ["install", "--manifest", str(manifest), "--host", "workstation", "--all-agents"]
+        )
+
+    assert failed.exit_code == 2
+    assert "workstation pi: failed" in failed.output
+    assert "simulated write failure" in failed.output
+    assert "workstation zcode: unattempted" in failed.output
+    assert "5 target(s): 3 updated, 1 failed, 1 unattempted" in failed.output
+    assert _target(home, "claude").is_file()
+    assert not _target(home, "pi").exists()
+    assert not _target(home, "zcode").exists()
+
+    rerun = runner.invoke(
+        app, ["install", "--manifest", str(manifest), "--host", "workstation", "--all-agents"]
+    )
+
+    assert rerun.exit_code == 0
+    assert str(home) in rerun.output
+    assert "5 target(s): 3 unchanged, 2 updated" in rerun.output
+    for agent in ("codex", "pi", "zcode", "claude", "cursor"):
+        assert _target(home, agent).is_file()
+
+
+@pytest.mark.parametrize(
+    ("name", "extra_args"),
+    [
+        ("validate", []),
+        ("check", ["--host", "workstation", "--all-agents"]),
+        ("install", ["--host", "workstation", "--all-agents"]),
+    ],
+)
+def test_manifest_read_error_is_configuration_error(
+    tmp_path: Path, monkeypatch: object, name: str, extra_args: list[str]
+) -> None:
+    manifest = _manifest(tmp_path)
+    home = _home(tmp_path, monkeypatch)
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        cli,
+        "load_manifest",
+        mock.Mock(side_effect=PermissionError("manifest read denied")),
+    )
+
+    result = runner.invoke(app, [name, "--manifest", str(manifest), *extra_args])
+
+    assert result.exit_code == 2
+    assert "Error: manifest read denied" in result.output
+    assert list(home.iterdir()) == []

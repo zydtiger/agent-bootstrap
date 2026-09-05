@@ -55,11 +55,16 @@ def inspect_target(rendered: str, agent: Agent, *, home: Path | None = None) -> 
     return TargetState(path=target, current=current, rendered=rendered)
 
 
+def is_unmanaged(state: TargetState) -> bool:
+    """Return whether an existing target lacks the generated marker."""
+    return state.current is not None and GENERATED_MARKER not in state.current
+
+
 def install_target(state: TargetState, *, force: bool = False) -> bool:
     """Atomically install rendered instructions and return whether they changed."""
     if not state.changed:
         return False
-    if state.current is not None and GENERATED_MARKER not in state.current and not force:
+    if is_unmanaged(state) and not force:
         raise InstallError(
             f"refusing to replace unmanaged file: {state.path}; rerun with --force after review"
         )
