@@ -13,9 +13,9 @@ The renderer does not prescribe names such as `common/`, `agents/`, or
 `machines/`. A manifest declares the fragment paths and their exact order, so a
 configuration repository may use any internal layout.
 
-Each invocation selects both a configured host and an agent. The agent is
-mandatory because it determines both the agent-specific fragments and the
-global installation target:
+Each rendering selects both a configured host and an agent. The agent
+determines both the agent-specific fragments and the global installation
+target:
 
 - `codex`: `~/.codex/AGENTS.md`
 - `pi`: `~/.pi/agent/AGENTS.md`
@@ -136,6 +136,73 @@ agent-bootstrap check \
 
 `check` exits with `0` when current, `1` when stale or missing, and `2` for an
 invalid manifest or operational error.
+
+Validate the rendering matrix:
+
+```bash
+agent-bootstrap validate \
+  --manifest ~/agent-config/manifest.toml
+```
+
+`validate` renders every declared host-agent pair without reading or writing
+installations. `--host` or `--agent` narrows one dimension to a declared
+member; unknown selectors are errors.
+
+Check, preview, or install every agent declared for one host:
+
+```bash
+agent-bootstrap check \
+  --manifest ~/agent-config/manifest.toml \
+  --host workstation \
+  --all-agents
+
+agent-bootstrap install \
+  --manifest ~/agent-config/manifest.toml \
+  --host workstation \
+  --all-agents \
+  --dry-run \
+  --diff
+
+agent-bootstrap install \
+  --manifest ~/agent-config/manifest.toml \
+  --host workstation \
+  --all-agents
+```
+
+`check` and `install` require exactly one explicit host and exactly one of
+`--agent` or `--all-agents`. Batch selection uses only the agents declared in
+the manifest, ordered lexicographically by host name and then agent
+identifier, and `host_agents` overrides never affect eligibility. `--force`
+stays reserved for explicit single-agent installation and is rejected with
+`--all-agents`.
+
+Batch commands print one line per target followed by a counts summary, with
+diagnostics on standard error. Batch `check` reports each target as
+`current`, `missing`, `stale`, `unmanaged`, or `error`, and keeps collecting
+results after a target-level failure. A dry-run preview reports `current`,
+`would-update`, or `blocked`, and `--diff` shows a labeled diff for every
+changed readable target, including unmanaged files.
+
+Batch installation renders every selected target and inspects every
+destination before writing: any rendering, inspection, or unmanaged-file
+blocker prevents all writes, so an unmanaged target must be adopted
+explicitly with a single-agent `install --force`. Once the preflight passes,
+changed targets are applied sequentially with the same atomic replacement and
+user-only permissions as single-target installation, and unchanged files are
+left untouched. A failed write stops the run while retaining completed
+updates; the report identifies updated, unchanged, failed, and unattempted
+targets, and rerunning after the failure skips current targets and completes
+the remaining work.
+
+## Exit status
+
+| Command | Exit 0 | Exit 1 | Exit 2 |
+| --- | --- | --- | --- |
+| `render` | Output written. | Unused. | Usage, manifest, rendering, or I/O error. |
+| `validate` | All selected renderings are valid. | Unused. | Usage, manifest, rendering, or I/O error. |
+| `check` | All selected targets are current. | At least one missing, stale, or unmanaged target. | Usage, manifest, rendering, or inspection error. |
+| `install --dry-run` | Preview completed, possibly with labeled ownership blockers. | Unused. | Usage, manifest, rendering, or inspection error. |
+| `install` | Installation completed, including unchanged targets. | Unused. | Preflight blocked or installation failed. |
 
 ## Installation
 

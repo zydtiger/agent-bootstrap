@@ -2,10 +2,10 @@
 
 ## Purpose
 
-- Keep this repository focused on deterministic assembly of global Codex instructions.
+- Keep this repository focused on deterministic assembly of global agent instructions.
 - Keep personal preferences, host details, credentials, and generated `AGENTS.md` files out of this repository.
 - Treat `manifest.toml` as configuration supplied by a separate consumer repository.
-- Keep the CLI Codex-specific until another target is explicitly approved.
+- Keep the CLI generic across the agents it supports; extend target coverage through the shared core rather than agent-specific commands.
 
 ## Design
 
