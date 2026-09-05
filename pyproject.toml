@@ -1,6 +1,6 @@
 [project]
 name = "agent-bootstrap"
-version = "0.5.0"
+version = "0.5.1"
 description = "Render layered global agent instructions from a manifest"
 readme = "README.md"
 license = "MIT"
